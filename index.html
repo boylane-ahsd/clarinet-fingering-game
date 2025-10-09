@@ -1,0 +1,240 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Clarinet Fingering Quiz</title>
+  <style>
+    body { font-family: Arial, sans-serif; text-align: center; background: #f5f5f5; padding: 16px; }
+    h1 { margin-bottom: 6px; }
+    #score { font-size: 18px; margin-bottom: 12px; }
+    #question { font-size: 22px; margin: 12px 0; min-height: 44px; }
+    .answers { display: flex; justify-content: center; flex-wrap: wrap; gap: 12px; margin-top: 10px; }
+    .answer {
+      width: 140px; height: 140px;
+      border: 2px solid #444; border-radius: 8px; background: #fff;
+      display:flex; align-items:center; justify-content:center;
+      cursor: pointer; user-select: none; transition: transform .08s ease, background .18s ease, border-color .18s ease;
+    }
+    .answer img { max-width: 100%; max-height: 100%; pointer-events: none; user-select: none; }
+    .answer:active { transform: scale(.98); }
+    .correct { border-color: #2e7d32; background: #c8e6c9; }
+    .wrong   { border-color: #c62828; background: #ffcdd2; }
+    #result { font-size: 18px; margin-top: 12px; min-height: 24px; }
+    #nextBtn { margin-top: 16px; padding: 10px 18px; font-size: 16px; cursor: pointer; }
+    .hidden { display: none; }
+    #finalMessage { font-size: 20px; margin-top: 20px; }
+    #finalMessage a { color: #1a73e8; text-decoration: underline; font-weight: 600; }
+  </style>
+</head>
+<body>
+  <h1>Clarinet Fingering Quiz</h1>
+  <div id="score">Score: 0</div>
+  <div id="question"></div>
+  <div class="answers" id="answers"></div>
+  <div id="result"></div>
+  <button id="nextBtn" class="hidden">Next Question</button>
+
+  <div id="finalMessage" class="hidden"></div>
+
+  <script>
+    // ----- CONFIG -----
+    // Map notes -> fingering images (must exist in same folder or use full URLs)
+    const fingerings = {
+      C: "clarinet_C.png",
+      D: "clarinet_D.png",
+      E: "clarinet_E.png",
+      F: "clarinet_F.png"
+    };
+
+    // Map notes -> staff images for round 2 (must exist)
+    const staffNotes = {
+      C: "note_C.png",
+      D: "note_D.png",
+      E: "note_E.png",
+      F: "note_F.png"
+    };
+
+    // Levels: each level's available notes
+    const levels = {
+      1: ["C","D"],
+      2: ["C","D","E"],
+      3: ["C","D","E","F"]
+    };
+
+    // Final Google Form base URL (replace with your form's link)
+    // If you want auto-filled score in a specific field, use your pre-filled pattern:
+    // e.g. "https://docs.google.com/forms/d/1X0WA6jk9L7l2IdaIHQBgNFBtgQcqUdtSsR1SAzrU2aA/preview"
+    // Leave as '#' until you replace it.
+    const googleFormBaseURL = "https://docs.google.com/forms/d/e/1FAIpQLSdkx0XU5B2hWMNG39N7k6NG9u_gLpM4vstsE7cLsFULGo1wqw/viewform?usp=preview";
+
+    // ----- GAME STATE -----
+    let currentLevel = 1;
+    let questionCount = 0;
+    const maxQuestions = 10;   // questions per round
+    let score = 0;
+    let roundType = 1;  // 1 = letter mode, 2 = staff-image mode
+
+    // Track last question + last order to avoid exact duplicates
+    let lastQuestion = null;
+    let lastOrder = null;
+
+    // Utility: shuffle (Fisher-Yates)
+    function shuffle(arr) {
+      const a = arr.slice();
+      for (let i = a.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [a[i], a[j]] = [a[j], a[i]];
+      }
+      return a;
+    }
+
+    function arraysEqual(a, b) {
+      if (!b) return false;
+      if (a.length !== b.length) return false;
+      for (let i = 0; i < a.length; i++) if (a[i] !== b[i]) return false;
+      return true;
+    }
+
+    // Pick a random note and shuffled options, but prevent exact duplicate (same note + same order) as previous question
+    function pickQuestionAndOptions() {
+      const notes = levels[currentLevel];
+      const note = notes[Math.floor(Math.random() * notes.length)];
+
+      // Start with a shuffled options array (all notes in this level)
+      let options = shuffle(notes);
+      let attempts = 0;
+      // If the new pair exactly matches the previous pair (same note and same order), reshuffle until it differs
+      while (lastQuestion === note && arraysEqual(options, lastOrder) && attempts < 50) {
+        options = shuffle(notes);
+        attempts++;
+      }
+
+      // Save for next time
+      lastQuestion = note;
+      lastOrder = options.slice();
+      return { note, options };
+    }
+
+    // Render a question to screen
+    function showQuestion() {
+      document.getElementById("result").textContent = "";
+      document.getElementById("nextBtn").classList.add("hidden");
+
+      const { note, options } = pickQuestionAndOptions();
+
+      const qDiv = document.getElementById("question");
+      if (roundType === 1) {
+        qDiv.textContent = `Which fingering plays note: ${note}?`;
+      } else {
+        // staff-image round
+        const staffSrc = staffNotes[note];
+        qDiv.innerHTML = `Which fingering plays this note?<br><img src="${staffSrc}" alt="Note ${note} on staff" style="height:90px;">`;
+      }
+
+      const answersDiv = document.getElementById("answers");
+      answersDiv.innerHTML = "";
+
+      options.forEach(opt => {
+        const el = document.createElement("div");
+        el.className = "answer";
+        el.dataset.note = opt; // exact note stored here
+
+        const img = document.createElement("img");
+        img.src = fingerings[opt];
+        img.alt = `Fingering for ${opt}`;
+        el.appendChild(img);
+
+        el.addEventListener("click", onAnswerClick);
+        answersDiv.appendChild(el);
+      });
+    }
+
+    // Single attempt handler
+    function onAnswerClick(e) {
+      const clicked = e.currentTarget;
+      const selected = clicked.dataset.note;
+      // The question's correct note is lastQuestion (we stored it when we generated)
+      // BUT safer: read the displayed question or store currentQuestion global
+      // We'll store currentQuestion explicitly.
+      // (We track lastQuestion which equals the current question because we updated lastQuestion when picking)
+      const correct = lastQuestion;
+
+      // Disable further clicks
+      const all = document.querySelectorAll(".answer");
+      all.forEach(btn => {
+        btn.style.pointerEvents = "none";
+      });
+
+      // Highlight correct one green, clicked wrong red
+      all.forEach(btn => {
+        if (btn.dataset.note === correct) btn.classList.add("correct");
+      });
+      if (selected !== correct) {
+        clicked.classList.add("wrong");
+        document.getElementById("result").textContent = `❌ Wrong. Correct answer: ${correct}`;
+      } else {
+        document.getElementById("result").textContent = "✅ Correct!";
+        score++;
+        document.getElementById("score").textContent = `Score: ${score}`;
+      }
+
+      document.getElementById("nextBtn").classList.remove("hidden");
+    }
+
+    // Next button logic
+    document.getElementById("nextBtn").addEventListener("click", () => {
+      questionCount++;
+      if (questionCount >= maxQuestions) {
+        questionCount = 0;
+        if (roundType === 1) {
+          // switch to staff round for the same level
+          roundType = 2;
+          alert("Now try the same notes by reading them on the staff!");
+        } else {
+          // finished both rounds for this level -> advance
+          roundType = 1;
+          currentLevel++;
+          if (!levels[currentLevel]) {
+            // game complete
+            finishGame();
+            return;
+          } else {
+            alert(`Level up! Now playing level ${currentLevel}`);
+          }
+        }
+      }
+      showQuestion();
+    });
+
+    function finishGame() {
+      // Clear UI
+      document.getElementById("question").textContent = "";
+      document.getElementById("answers").innerHTML = "";
+      document.getElementById("nextBtn").classList.add("hidden");
+      document.getElementById("result").textContent = "";
+
+      // Show final message and link
+      const final = document.getElementById("finalMessage");
+      // Build Google Form link. If you want score auto-filled, use the prefill pattern described below.
+      const formURL = googleFormBaseURL; // replace in config above
+
+      // If your googleFormBaseURL is a pre-filled link that ends with "...&entry.12345=", you can append the score:
+      // const submitURL = formURL + encodeURIComponent(score);
+      // For a plain form link, students will enter the score themselves:
+      const submitURL = formURL;
+
+      final.innerHTML = `
+        🎉 <strong>Congratulations — you finished the challenge!</strong><br>
+        You answered <strong>${score}</strong> questions correctly.<br><br>
+        <a href="${submitURL}" target="_blank">👉 Click here to submit your score</a>
+        <div style="font-size:14px;color:#666;margin-top:8px">(If you want the score auto-filled for students, use Google Form's "Get pre-filled link" and put the prefilled URL into the <code>googleFormBaseURL</code> variable.)</div>
+      `;
+      final.classList.remove("hidden");
+    }
+
+    // Start
+    showQuestion();
+  </script>
+</body>
+</html>
